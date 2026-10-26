@@ -35,7 +35,7 @@ public class LeaveRequestDataService {
     }
 
     public Page<LeaveRequest> findByFilters(
-            Long employeeId,
+            Collection<Long> employeeIds,
             LeaveRequest.Status status,
             LocalDate from,
             LocalDate to,
@@ -43,7 +43,7 @@ public class LeaveRequestDataService {
         Specification<LeaveRequest> specification = (root, query, criteriaBuilder) -> {
             List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
 
-            predicates.add(criteriaBuilder.equal(root.get("employeeId"), employeeId));
+            predicates.add(root.get("employeeId").in(employeeIds));
 
             if (status != null) {
                 predicates.add(criteriaBuilder.equal(root.get("status"), status));

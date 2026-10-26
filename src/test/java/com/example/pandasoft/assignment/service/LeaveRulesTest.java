@@ -53,6 +53,8 @@ class LeaveRulesTest {
     void setup() {
         MockitoAnnotations.openMocks(this);
         when(idempotency.reserveOrGet(any(), anyLong())).thenReturn(null);
+        when(employees.getRequiredForUpdate(anyLong()))
+                .thenAnswer(invocation -> employees.getRequired(invocation.getArgument(0)));
         service = new LeaveService(
                 requests, employees, types, idempotency, logs, approvedEvents, "2026-01-01");
     }

@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class LeaveService {
@@ -65,7 +66,7 @@ public class LeaveService {
             return requests.getRequired(existing.getLeaveRequestId());
         }
 
-        Employee owner = employees.getRequired(actor);
+        Employee owner = employees.getRequiredForUpdate(actor);
 
         if (owner.getRole() != Employee.Role.EMPLOYEE) {
             throw ApiException.forbidden();
@@ -88,8 +89,12 @@ public class LeaveService {
         int used = requests.findCounted(
                         actor, body.leaveType(), yearStart, yearEnd, COUNTED_STATUSES)
                 .stream()
-                .filter(request -> request.getStartDate().getYear() == year)
-                .mapToInt(LeaveRequest::getDays)
+                .mapToInt(request -> LeaveDateUtils.workingDays(
+                        request.getStartDate().isBefore(yearStart)
+                                ? yearStart : request.getStartDate(),
+                        request.getEndDate().isAfter(yearEnd)
+                                ? yearEnd : request.getEndDate(),
+                        holidays))
                 .sum();
 
         int quota = types.getRequired(body.leaveType()).getYearlyQuota();
@@ -157,15 +162,24 @@ public class LeaveService {
             LocalDate from,
             LocalDate to,
             Pageable pageable) {
-        Long target = employeeId == null ? actor : employeeId;
-        employees.getRequired(actor);
+        Employee caller = employees.getRequired(actor);
+        List<Long> visibleEmployeeIds;
 
-        if (!target.equals(actor)
-                && !Objects.equals(employees.getRequired(target).getManagerId(), actor)) {
-            throw ApiException.forbidden();
+        if (employeeId != null) {
+            if (!employeeId.equals(actor)
+                    && !Objects.equals(employees.getRequired(employeeId).getManagerId(), actor)) {
+                throw ApiException.forbidden();
+            }
+            visibleEmployeeIds = List.of(employeeId);
+        } else if (caller.getRole() == Employee.Role.MANAGER) {
+            visibleEmployeeIds = employees.findByManagerId(actor).stream()
+                    .map(Employee::getId)
+                    .collect(Collectors.toList());
+        } else {
+            visibleEmployeeIds = List.of(actor);
         }
 
-        return requests.findByFilters(target, status, from, to, pageable);
+        return requests.findByFilters(visibleEmployeeIds, status, from, to, pageable);
     }
 
     @Transactional(readOnly = true)

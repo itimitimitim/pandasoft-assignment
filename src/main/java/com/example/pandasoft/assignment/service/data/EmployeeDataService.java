@@ -6,6 +6,8 @@ import com.example.pandasoft.assignment.repository.EmployeeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class EmployeeDataService {
@@ -15,5 +17,14 @@ public class EmployeeDataService {
     public Employee getRequired(Long id) {
         return repository.findById(id)
                 .orElseThrow(() -> ApiException.missing("Employee"));
+    }
+
+    public Employee getRequiredForUpdate(Long id) {
+        return repository.findByIdForUpdate(id)
+                .orElseThrow(() -> ApiException.missing("Employee"));
+    }
+
+    public List<Employee> findByManagerId(Long managerId) {
+        return repository.findByManagerId(managerId);
     }
 }

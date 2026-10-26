@@ -36,7 +36,7 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 
 - `POST /api/v1/auth/login` — exchange employee ID and password for a JWT.
 - `POST /api/v1/leave-requests` — create a request (JSON: `leaveType`, `startDate`, `endDate`, `reason`). Send a unique `Idempotency-Key` header; retries with the same key return the original request.
-- `GET /api/v1/leave-requests` — list own requests, or manager-visible requests, with `employeeId`, `status`, `from`, `to`, `page`, `size`, and `sort` parameters.
+- `GET /api/v1/leave-requests` — list requests with `employeeId`, `status`, `from`, `to`, `page`, `size`, and `sort` parameters. Without `employeeId`, an employee sees their own requests and a manager sees requests from all direct reports.
 - `GET /api/v1/leave-requests/{id}` — view an owned or direct-report request.
 - `POST /api/v1/leave-requests/{id}/approve` — manager approval.
 - `POST /api/v1/leave-requests/{id}/reject` — manager rejection, JSON `{"reason":"..."}`.
