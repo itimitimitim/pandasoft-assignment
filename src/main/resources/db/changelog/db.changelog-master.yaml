@@ -1,0 +1,199 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1-create-leave-schema
+      author: codex
+      changes:
+        - createTable:
+            tableName: employees
+            columns:
+              - column: {name: id, type: BIGINT, constraints: {primaryKey: true, nullable: false}}
+              - column: {name: name, type: VARCHAR(255), constraints: {nullable: false}}
+              - column: {name: email, type: VARCHAR(255), constraints: {nullable: false, unique: true}}
+              - column: {name: role, type: VARCHAR(30), constraints: {nullable: false}}
+              - column: {name: manager_id, type: BIGINT}
+        - createTable:
+            tableName: leave_types
+            columns:
+              - column: {name: code, type: VARCHAR(30), constraints: {primaryKey: true, nullable: false}}
+              - column: {name: yearly_quota, type: INT, constraints: {nullable: false}}
+        - createTable:
+            tableName: leave_requests
+            columns:
+              - column: {name: id, type: BIGINT, autoIncrement: true, constraints: {primaryKey: true, nullable: false}}
+              - column: {name: employee_id, type: BIGINT, constraints: {nullable: false}}
+              - column: {name: leave_type, type: VARCHAR(30), constraints: {nullable: false}}
+              - column: {name: start_date, type: DATE, constraints: {nullable: false}}
+              - column: {name: end_date, type: DATE, constraints: {nullable: false}}
+              - column: {name: reason, type: VARCHAR(1000), constraints: {nullable: false}}
+              - column: {name: status, type: VARCHAR(30), constraints: {nullable: false}}
+              - column: {name: days, type: INT, constraints: {nullable: false}}
+              - column: {name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: decided_by, type: BIGINT}
+              - column: {name: decided_at, type: TIMESTAMP WITH TIME ZONE}
+              - column: {name: decision_reason, type: VARCHAR(1000)}
+              - column: {name: version, type: BIGINT, defaultValueNumeric: 0, constraints: {nullable: false}}
+        - addForeignKeyConstraint: {baseTableName: leave_requests, baseColumnNames: employee_id, referencedTableName: employees, referencedColumnNames: id, constraintName: fk_leave_employee}
+        - addForeignKeyConstraint: {baseTableName: leave_requests, baseColumnNames: leave_type, referencedTableName: leave_types, referencedColumnNames: code, constraintName: fk_leave_type}
+        - createIndex:
+            tableName: leave_requests
+            indexName: idx_leave_employee_dates
+            columns:
+              - column: {name: employee_id}
+              - column: {name: start_date}
+              - column: {name: end_date}
+  - changeSet:
+      id: 2-seed-leave-types
+      author: codex
+      changes:
+        - insert:
+            tableName: leave_types
+            columns: [{column: {name: code, value: ANNUAL}}, {column: {name: yearly_quota, valueNumeric: 10}}]
+        - insert:
+            tableName: leave_types
+            columns: [{column: {name: code, value: SICK}}, {column: {name: yearly_quota, valueNumeric: 30}}]
+        - insert:
+            tableName: leave_types
+            columns: [{column: {name: code, value: PERSONAL}}, {column: {name: yearly_quota, valueNumeric: 3}}]
+  - changeSet:
+      id: 3-seed-employees
+      author: codex
+      changes:
+        - insert:
+            tableName: employees
+            columns: [{column: {name: id, valueNumeric: 100}}, {column: {name: name, value: Maya Manager}}, {column: {name: email, value: maya@example.com}}, {column: {name: role, value: MANAGER}}]
+        - insert:
+            tableName: employees
+            columns: [{column: {name: id, valueNumeric: 101}}, {column: {name: name, value: Alex Manager}}, {column: {name: email, value: alex@example.com}}, {column: {name: role, value: MANAGER}}]
+        - insert:
+            tableName: employees
+            columns: [{column: {name: id, valueNumeric: 1}}, {column: {name: name, value: Sam Employee}}, {column: {name: email, value: sam@example.com}}, {column: {name: role, value: EMPLOYEE}}, {column: {name: manager_id, valueNumeric: 100}}]
+        - insert:
+            tableName: employees
+            columns: [{column: {name: id, valueNumeric: 2}}, {column: {name: name, value: Riley Employee}}, {column: {name: email, value: riley@example.com}}, {column: {name: role, value: EMPLOYEE}}, {column: {name: manager_id, valueNumeric: 100}}]
+        - insert:
+            tableName: employees
+            columns: [{column: {name: id, valueNumeric: 3}}, {column: {name: name, value: Jordan Employee}}, {column: {name: email, value: jordan@example.com}}, {column: {name: role, value: EMPLOYEE}}, {column: {name: manager_id, valueNumeric: 101}}]
+  - changeSet:
+      id: 4-add-password-hash
+      author: codex
+      changes:
+        - addColumn:
+            tableName: employees
+            columns:
+              - column:
+                  name: password_hash
+                  type: VARCHAR(255)
+                  defaultValue: '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 5-set-demo-password-hashes
+      author: codex
+      changes:
+        - sql:
+            sql: |
+              UPDATE employees
+              SET password_hash = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
+              WHERE id IN (1, 2, 3, 100, 101);
+  - changeSet:
+      id: 6-fix-demo-password-hashes
+      author: codex
+      changes:
+        - sql:
+            sql: |
+              UPDATE employees
+              SET password_hash = '$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG'
+              WHERE id IN (1, 2, 3, 100, 101);
+  - changeSet:
+      id: 7-create-idempotency-keys
+      author: codex
+      changes:
+        - createTable:
+            tableName: idempotency_keys
+            columns:
+              - column:
+                  name: key
+                  type: VARCHAR(255)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: employee_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: leave_request_id
+                  type: BIGINT
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: idempotency_keys
+            baseColumnNames: employee_id
+            referencedTableName: employees
+            referencedColumnNames: id
+            constraintName: fk_idempotency_employee
+        - addForeignKeyConstraint:
+            baseTableName: idempotency_keys
+            baseColumnNames: leave_request_id
+            referencedTableName: leave_requests
+            referencedColumnNames: id
+            constraintName: fk_idempotency_leave_request
+  - changeSet:
+      id: 8-create-leave-request-status-audits
+      author: codex
+      changes:
+        - createTable:
+            tableName: leave_request_logs
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: leave_request_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: actor_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: from_status
+                  type: VARCHAR(30)
+              - column:
+                  name: to_status
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: changed_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: leave_request_logs
+            baseColumnNames: leave_request_id
+            referencedTableName: leave_requests
+            referencedColumnNames: id
+            constraintName: fk_status_audit_leave_request
+        - addForeignKeyConstraint:
+            baseTableName: leave_request_logs
+            baseColumnNames: actor_id
+            referencedTableName: employees
+            referencedColumnNames: id
+            constraintName: fk_status_audit_actor
+        - createIndex:
+            tableName: leave_request_logs
+            indexName: idx_status_audit_request_changed_at
+            columns:
+              - column: {name: leave_request_id}
+              - column: {name: changed_at}
