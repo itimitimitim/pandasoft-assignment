@@ -1,5 +1,9 @@
 package com.example.pandasoft.assignment;
 
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,8 +17,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,11 +39,18 @@ class LeaveApiIntegrationTest {
             .withUsername("leave")
             .withPassword("leave");
 
+    @Container
+    static KafkaContainer kafka = new KafkaContainer(
+            DockerImageName.parse("apache/kafka:3.9.1"));
+
     @DynamicPropertySource
     static void databaseProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+        registry.add("kafka.enabled", () -> "true");
+        registry.add("spring.kafka.admin.auto-create", () -> "true");
     }
 
     @Autowired
@@ -121,11 +139,37 @@ class LeaveApiIntegrationTest {
                 String.class);
         assertThat(refused.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
 
-        ResponseEntity<String> approved = http.postForEntity(
-                "/api/v1/leave-requests/" + id + "/approve",
-                new HttpEntity<>("{}", headers(100)),
-                String.class);
-        assertThat(approved.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(approved.getBody()).contains("APPROVED");
+        try (KafkaConsumer<String, String> consumer = kafkaConsumer()) {
+            consumer.subscribe(List.of("leave.approved"));
+
+            ResponseEntity<String> approved = http.postForEntity(
+                    "/api/v1/leave-requests/" + id + "/approve",
+                    new HttpEntity<>("{}", headers(100)),
+                    String.class);
+            assertThat(approved.getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(approved.getBody()).contains("APPROVED");
+
+            boolean eventReceived = false;
+            long deadline = System.currentTimeMillis() + 15_000;
+            while (!eventReceived && System.currentTimeMillis() < deadline) {
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(500));
+                for (var record : records.records("leave.approved")) {
+                    if (record.value().contains("\"leaveRequestId\":" + id)) {
+                        eventReceived = true;
+                        break;
+                    }
+                }
+            }
+            assertThat(eventReceived).isTrue();
+        }
+    }
+
+    private KafkaConsumer<String, String> kafkaConsumer() {
+        return new KafkaConsumer<>(Map.of(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers(),
+                ConsumerConfig.GROUP_ID_CONFIG, "leave-api-test-" + UUID.randomUUID(),
+                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class));
     }
 }
